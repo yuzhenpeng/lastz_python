@@ -33,6 +33,10 @@ class LastZ:
         self.query_net_file = str(query)[:-5] + ".net"
         self.syntenic_file = str(target)[:-5] + "_" + str(query)[:-5] + \
             ".syntenicnet"
+        self.unsorted_axt_file = str(target)[:-5] + "_" + str(query)[:-5] + \
+            "_unsorted.axt"
+        self.axt_file = str(target)[:-5] + "_" + str(query)[:-5] + \
+            ".axt"
         self.lastz()
         self.validate_completion()
         self.convert_lav_to_psl()
@@ -41,6 +45,8 @@ class LastZ:
         self.chain_pre_net()
         self.chain_net()
         self.net_syntenic()
+        self.net_to_axt()
+        self.axt_sort()
 
     def lastz(self):
         """
@@ -166,6 +172,23 @@ class LastZ:
         # Call to netSyntenic from kentUtils
         call(["/homes/cwalker/tools/lastz/data/bin/netSyntenic",
               self.target_net_file, self.syntenic_file])
+
+    def net_to_axt(self):
+        """
+        Convert net and chains to .axt format.
+        """
+        # Call to netToAxt from kentUtils
+        call(["/homes/cwalker/tools/lastz/data/bin/netToAxt",
+              self.syntenic_file, self.pre_net_file, self.target,
+              self.query, self.unsorted_axt_file])
+
+    def axt_sort(self):
+        """
+        Sort the generated axt file(s).
+        """
+        # Call to axtSort from kentUtils
+        call(["/homes/cwalker/tools/lastz/data/bin/axtSort",
+              self.unsorted_axt_file, self.axt_file])
 
 
 def main():
