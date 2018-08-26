@@ -25,6 +25,7 @@ class LastZ:
         self.lastz()
         self.validate_completion()
         self.convert_lav_to_psl()
+        self.chaining()
 
     def lastz(self):
         """
@@ -108,7 +109,12 @@ class LastZ:
         # Call axtChain
         call(["/homes/cwalker/tools/lastz/data/bin/axtChain", "-psl",
               min_score, score_scheme, linear_gap,
-              self.out_psl_file, self.target, self.query, self.out_chain_file])
+              self.out_psl_file, self.query, self.target, self.out_chain_file])
+        # Delete psl file
+        remove(self.out_psl_file)
+
+    def chain_merge_sort(self):
+        pass
 
     #@staticmethod
     #def create_matrix_file(my_scoring_matrix):
@@ -122,7 +128,7 @@ def main():
  
     print scoring_matrix
 
-    LastZ(query="seq1.fa", target="seq2.fa", score_matrix="human_matrix.txt",
+    LastZ(query="seq1.2bit", target="seq2.2bit", score_matrix="human_matrix.txt",
          output_file="out.lav")
     
     
