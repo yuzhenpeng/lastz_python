@@ -1,20 +1,31 @@
 #!/bin/python
 
-#import os
-#import tempfile
+import datetime
 
 from subprocess import call
 from subprocess import check_output
+from subprocess import STDOUT
 from sys import exit
+from sys import argv
 from os import remove
+from os import devnull
+from os import path
+from os import makedirs
+from os import getcwd
+from os import path
+from pathlib2 import Path
 
 
 class LastZ:
     def __init__(self, output_dir=".", score_matrix=None, query="",
-                 target="", output_format="lav", output_files=None):
+                 target="", output_format="lav", output_files=None,
+                 log_path=None):
         """
         Python wrapper for performing a human-human lastz alignment.
         """
+        self.FNULL = open(devnull, "w")
+        self.log_file = "lastz_logs/" + str(target)[:-5] + "_" + \
+            str(query)[:-5] + ".log"
         self.output_dir = output_dir
         self.score_matrix = score_matrix
         self.target = target
@@ -47,6 +58,15 @@ class LastZ:
         self.net_syntenic()
         self.net_to_axt()
         self.axt_sort()
+        self.clean_up()
+
+    def update_log(self, step_name, step_no, time):
+        """
+        Appends the alignment status to an associated log file.
+        """
+        with open(self.log_file, "a+") as log_file:
+            log_file.write("Executing step {0}/11: {1} ({2})\n".format(
+                step_no, step_name, time))
 
     def lastz(self):
         """
@@ -81,6 +101,10 @@ class LastZ:
                   the endpoints of each local alignment by limiting the local
                   region around each anchor in which extension is performed.
         """
+        # Update the status log
+        self.update_log("LASTZ alignment", "1", datetime.datetime.now())
+
+        # Format options to pass to lastz
         out_format = "--format=" + str(self.output_format)
         out_file = "--output=" + str(self.output_file)
         score_mat = "Q=" + str(self.score_matrix)
@@ -91,6 +115,7 @@ class LastZ:
               out_format, out_file])
 
     def validate_completion(self):
+        self.update_log("Validating alignment", "2", datetime.datetime.now())
         """
         Check if lastz alignment completed successfully.
         """
@@ -105,12 +130,14 @@ class LastZ:
 
     def convert_lav_to_psl(self):
         """
-        Conver the generated lav file to psl format. Required for next axtChain.
+        Convert the generated lav file to psl format. Required for next axtChain.
         """
+        self.update_log("Converting the .lav to .psl", "3",
+                        datetime.datetime.now())
         # Name for psl file
         # Call kentUtils tool lavToPsl to perform the format conversion
         call(["/homes/cwalker/tools/lastz/data/bin/lavToPsl", self.output_file,
-              self.out_psl_file])
+              self.out_psl_file], stdout=self.FNULL, stderr=STDOUT)
         # Delete the lav file
         remove(self.output_file)
 
@@ -121,6 +148,7 @@ class LastZ:
         into one fragment. These chain files are then sorted and combined into
         a single file.
         """
+        self.update_log("Initial chaining", "4", datetime.datetime.now())
         # Reads in previously used scoring matrix
         score_scheme = "-scoreScheme=" + str(self.score_matrix)
         # Set to medium because closely related (same species...)
@@ -130,16 +158,19 @@ class LastZ:
         # Call axtChain
         call(["/homes/cwalker/tools/lastz/data/bin/axtChain", "-psl",
               min_score, score_scheme, linear_gap,
-              self.out_psl_file, self.target, self.query, self.out_chain_file])
+              self.out_psl_file, self.target, self.query,
+              self.out_chain_file], stdout=self.FNULL, stderr=STDOUT)
         # Delete psl file
         remove(self.out_psl_file)
 
     def chain_merge_sort(self):
         """
-        Perform chain, merge sort step (combines sorted chained files into
+        Perform chain, merge, sort step (combines sorted chained files into
         larger sorted files).
         """
         # Call to chainMergeSort from kentUtils
+        self.update_log("Chaining, merging & sorting", "5",
+                        datetime.datetime.now())
         call(["/homes/cwalker/tools/lastz/data/bin/chainMergeSort",
               self.out_chain_file], stdout=open(self.all_chain_file, "w"))
         # Remove file from previous step  containing shorter sorted chains
@@ -149,10 +180,11 @@ class LastZ:
         """
         Removes chains that don't have a chance of being netted.
         """
+        self.update_log("Pre-netting processing", "6", datetime.datetime.now())
         # Call chainPreNet from kentUtils
         call(["/homes/cwalker/tools/lastz/data/bin/chainPreNet",
               self.all_chain_file, self.target_sizes, self.query_sizes,
-              self.pre_net_file])
+              self.pre_net_file], stdout=self.FNULL, stderr=STDOUT)
         # Remove all_chain file from previous step
         remove(self.all_chain_file)
 
@@ -161,38 +193,77 @@ class LastZ:
         Make alignment nets out of the chains.
         """
         # Call to chainNet from kentUtils
+        self.update_log("Generating alignment nets", "7",
+                        datetime.datetime.now())
         call(["/homes/cwalker/tools/lastz/data/bin/chainNet",
               self.pre_net_file, self.target_sizes, self.query_sizes,
-              self.target_net_file, self.query_net_file])
+              self.target_net_file, self.query_net_file],
+             stdout=self.FNULL, stderr=STDOUT)
 
     def net_syntenic(self):
         """
         Add synteny information to the nets.
         """
+        self.update_log("Adding synteny information", "8",
+                        datetime.datetime.now())
         # Call to netSyntenic from kentUtils
         call(["/homes/cwalker/tools/lastz/data/bin/netSyntenic",
-              self.target_net_file, self.syntenic_file])
+              self.target_net_file, self.syntenic_file],
+             stdout=self.FNULL, stderr=STDOUT)
 
     def net_to_axt(self):
         """
         Convert net and chains to .axt format.
         """
+        self.update_log("Converting to .axt format", "9",
+                        datetime.datetime.now())
         # Call to netToAxt from kentUtils
         call(["/homes/cwalker/tools/lastz/data/bin/netToAxt",
               self.syntenic_file, self.pre_net_file, self.target,
-              self.query, self.unsorted_axt_file])
+              self.query, self.unsorted_axt_file], stdout=self.FNULL,
+             stderr=STDOUT)
 
     def axt_sort(self):
         """
         Sort the generated axt file(s).
         """
+        self.update_log("Sorting the .axt file(s)", "10",
+                        datetime.datetime.now())
         # Call to axtSort from kentUtils
         call(["/homes/cwalker/tools/lastz/data/bin/axtSort",
-              self.unsorted_axt_file, self.axt_file])
+              self.unsorted_axt_file, self.axt_file],
+             stdout=self.FNULL, stderr=STDOUT)
+
+    def clean_up(self):
+        """
+        Removes any files which are not the final alignment.
+        """
+        self.update_log("Cleaning up temporary files", "11",
+                        datetime.datetime.now())
+        remove(self.syntenic_file)
+        remove(self.unsorted_axt_file)
+        remove(self.target_net_file)
+        remove(self.query_net_file)
+        remove(self.pre_net_file)
 
 
 def main():
-    LastZ(target="seq1.2bit", query="seq2.2bit",
+    cwd = getcwd()
+    log_file = str(argv[1])[:-5] + "_" + str(argv[2])[:-5] + ".log"
+
+    print log_file
+    log_file_path = (str(cwd) + "/" + log_file)
+    print log_file_path
+    if path.exists("./seq1_seq2.log"):
+        print "EXISTS2"
+        remove(str(log_file_path))
+
+    if not path.exists("lastz_logs"):
+        makedirs("lastz_logs")
+
+    logs = cwd + "/lastz_logs"
+
+    LastZ(target=argv[1], query=argv[2], log_path=logs,
           score_matrix="human_matrix.txt", output_files="out")
 
 
