@@ -5,24 +5,23 @@ import datetime
 from subprocess import call
 from subprocess import check_output
 from subprocess import STDOUT
+from subprocess import PIPE
+from subprocess import Popen
 from sys import exit
 from sys import argv
 from os import remove
 from os import devnull
 from os import path
 from os import makedirs
-from os import getcwd
-from os import path
-from pathlib2 import Path
 
 
 class LastZ:
     def __init__(self, output_dir=".", score_matrix=None, query="",
-                 target="", output_format="lav", output_files=None,
-                 log_path=None):
+                 target="", output_format="lav", output_files=None):
         """
         Python wrapper for performing a human-human lastz alignment.
         """
+        # Declare variables
         self.FNULL = open(devnull, "w")
         self.log_file = "lastz_logs/" + str(target)[:-5] + "_" + \
             str(query)[:-5] + ".log"
@@ -46,8 +45,11 @@ class LastZ:
             ".syntenicnet"
         self.unsorted_axt_file = str(target)[:-5] + "_" + str(query)[:-5] + \
             "_unsorted.axt"
-        self.axt_file = str(target)[:-5] + "_" + str(query)[:-5] + \
-            ".axt"
+        self.axt_file = str(target)[:-5] + "_" + str(query)[:-5] + ".axt"
+        self.maf_file = str(target)[:-5] + "_" + str(query)[:-5] + ".maf"
+
+        # Call functions to proceed with alignment steps
+        self.sizes_files()
         self.lastz()
         self.validate_completion()
         self.convert_lav_to_psl()
@@ -58,15 +60,36 @@ class LastZ:
         self.net_syntenic()
         self.net_to_axt()
         self.axt_sort()
+        self.axt_to_maf()
         self.clean_up()
 
     def update_log(self, step_name, step_no, time):
         """
         Appends the alignment status to an associated log file.
         """
+        # Remove milliseconds from the logged time
+        time = str(time).split(".")[0]
         with open(self.log_file, "a+") as log_file:
-            log_file.write("Executing step {0}/11: {1} ({2})\n".format(
+            log_file.write("[{2}] {0}/12: {1}\n".format(
                 step_no, step_name, time))
+        print("[{2}] {0}/12: {1}".format(
+              step_no, step_name, time))
+
+    def sizes_files(self):
+        """
+        Check if the .sizes files exist, required later in the pipeline.
+        """
+        # Check files exist or not
+        target_sizes = self.target[:-5] + ".sizes"
+        query_sizes = self.query[:-5] + ".sizes"
+        if not path.exists(target_sizes):
+            p1 = Popen(["/homes/cwalker/tools/lastz/data/bin/twoBitInfo",
+                       self.target, "stdout"], stdout=PIPE)
+            call(["sort", "-k2rn"], stdin=p1.stdout, stdout=open(target_sizes, "w"))
+        if not path.exists(query_sizes):
+            p1 = Popen(["/homes/cwalker/tools/lastz/data/bin/twoBitInfo",
+                       self.query, "stdout"], stdout=PIPE)
+            call(["sort", "-k2rn"], stdin=p1.stdout, stdout=open(query_sizes, "w"))
 
     def lastz(self):
         """
@@ -234,37 +257,49 @@ class LastZ:
               self.unsorted_axt_file, self.axt_file],
              stdout=self.FNULL, stderr=STDOUT)
 
+    def axt_to_maf(self):
+        """
+        Converts the generated .axt file to .maf format.
+        """
+        self.update_log("Converting .axt to .maf", "11", datetime.datetime.now())
+        # Call to axtToMaf from kentUtils
+        call(["/homes/cwalker/tools/lastz/data/bin/axtToMaf", self.axt_file,
+              self.target_sizes, self.query_sizes, self.maf_file])
+
     def clean_up(self):
         """
         Removes any files which are not the final alignment.
         """
-        self.update_log("Cleaning up temporary files", "11",
+        self.update_log("Cleaning up temporary files", "12",
                         datetime.datetime.now())
         remove(self.syntenic_file)
         remove(self.unsorted_axt_file)
         remove(self.target_net_file)
         remove(self.query_net_file)
         remove(self.pre_net_file)
+        # Update log to indicate completion
+        with open(self.log_file, "a") as log_file:
+            log_file.write("\n# alignment-finished\n")
 
 
 def main():
-    cwd = getcwd()
+    # Name for log file of run
     log_file = str(argv[1])[:-5] + "_" + str(argv[2])[:-5] + ".log"
 
-    print log_file
-    log_file_path = (str(cwd) + "/" + log_file)
-    print log_file_path
-    if path.exists("./seq1_seq2.log"):
-        print "EXISTS2"
+    # Path to check for exitence of identical log file
+    log_file_path = "lastz_logs/" + log_file
+
+    # Remove log file if it already existed
+    if path.exists(log_file_path):
         remove(str(log_file_path))
 
+    # Create directory to store logs of runs if it doesn't exist
     if not path.exists("lastz_logs"):
         makedirs("lastz_logs")
 
-    logs = cwd + "/lastz_logs"
-
-    LastZ(target=argv[1], query=argv[2], log_path=logs,
-          score_matrix="human_matrix.txt", output_files="out")
+    # Perform with alignment, chaining and netting
+    LastZ(target=argv[1], query=argv[2], score_matrix="human_matrix.txt",
+          output_files="out")
 
 
 if __name__ == "__main__":
