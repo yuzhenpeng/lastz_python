@@ -23,8 +23,8 @@ class LastZ:
         """
         # Declare variables
         self.FNULL = open(devnull, "w")
-        self.log_file = "lastz_logs/" + str(target)[:-5] + "_" + \
-            str(query)[:-5] + ".log"
+        self.log_file = "lastz_logs/" + str(target).split("/")[-1][:-5] + \
+            "_" + str(query).split("/")[-1][:-5] + ".log"
         self.output_dir = output_dir
         self.score_matrix = score_matrix
         self.target = target
@@ -72,8 +72,7 @@ class LastZ:
         with open(self.log_file, "a+") as log_file:
             log_file.write("[{2}] {0}/12: {1}\n".format(
                 step_no, step_name, time))
-        print("[{2}] {0}/12: {1}".format(
-              step_no, step_name, time))
+        print("[{2}] {0}/12: {1}".format(step_no, step_name, time))
 
     def sizes_files(self):
         """
@@ -85,11 +84,13 @@ class LastZ:
         if not path.exists(target_sizes):
             p1 = Popen(["/homes/cwalker/tools/lastz/data/bin/twoBitInfo",
                        self.target, "stdout"], stdout=PIPE)
-            call(["sort", "-k2rn"], stdin=p1.stdout, stdout=open(target_sizes, "w"))
+            call(["sort", "-k2rn"], stdin=p1.stdout,
+                 stdout=open(target_sizes, "w"))
         if not path.exists(query_sizes):
             p1 = Popen(["/homes/cwalker/tools/lastz/data/bin/twoBitInfo",
                        self.query, "stdout"], stdout=PIPE)
-            call(["sort", "-k2rn"], stdin=p1.stdout, stdout=open(query_sizes, "w"))
+            call(["sort", "-k2rn"], stdin=p1.stdout,
+                 stdout=open(query_sizes, "w"))
 
     def lastz(self):
         """
@@ -283,8 +284,10 @@ class LastZ:
 
 
 def main():
+    print argv[1].split("/")[-1]
     # Name for log file of run
-    log_file = str(argv[1])[:-5] + "_" + str(argv[2])[:-5] + ".log"
+    log_file = str(argv[1]).split("/")[-1][:-5] + "_" + \
+        str(argv[2]).split("/")[-1][:-5] + ".log"
 
     # Path to check for exitence of identical log file
     log_file_path = "lastz_logs/" + log_file
@@ -298,7 +301,9 @@ def main():
         makedirs("lastz_logs")
 
     # Perform with alignment, chaining and netting
-    LastZ(target=argv[1], query=argv[2], score_matrix="human_matrix.txt",
+    LastZ(target=argv[1],
+          query=argv[2],
+          score_matrix="/nfs/research1/goldman/conor/scripts/lastz/human_matrix.txt",
           output_files="out")
 
 
