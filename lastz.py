@@ -63,6 +63,14 @@ class LastZ:
         self.axt_to_maf()
         self.clean_up()
 
+    def check_2bit(self):
+        """
+        Check the input sequence is in .2bit format.
+        """
+        if self.target[-4:] != "2bit" or self.query[-4:] != "2bit":
+            print "Error: input files must be in .2bit format."
+            exit()
+
     def update_log(self, step_name, step_no, time):
         """
         Appends the alignment status to an associated log file.
