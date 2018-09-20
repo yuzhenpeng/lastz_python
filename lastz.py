@@ -17,38 +17,48 @@ from os import makedirs
 
 class LastZ:
     def __init__(self, output_dir=".", score_matrix=None, query="",
-                 target="", output_format="lav", output_files=None):
+                 target="", output_format="lav", output_files=None,
+                 log_path=None):
         """
         Python wrapper for performing a human-human lastz alignment.
         """
         # Declare variables
+        self.temp_file_dir = \
+            ("/hps/nobackup/research/goldmans/conor/lastz_temp_files/") + \
+            query.split("/")[-1].split(".")[0] + "/"
+        self.temp_file = self.temp_file_dir + \
+            query.split("/")[-1].split(".")[0] + "." + \
+            query.split("/")[-1].split(".")[1]
         self.FNULL = open(devnull, "w")
-        self.log_file = "lastz_logs/" + str(target).split("/")[-1][:-5] + \
+        self.log_file = log_path + "/" + str(target).split("/")[-1][:-5] + \
             "_" + str(query).split("/")[-1][:-5] + ".log"
         self.output_dir = output_dir
         self.score_matrix = score_matrix
         self.target = target
+        self.target_only = target.split("/")[-1].split(".")[0]
         self.target_sizes = str(target)[:-5] + ".sizes"
         self.query = query
+        self.query_only = query.split("/")[-1].split(".")[0]
         self.query_sizes = str(query)[:-5] + ".sizes"
         self.output_format = output_format
-        self.output_file = output_files + ".lav"
-        self.out_psl_file = output_files + ".psl"
-        self.out_chain_file = output_files + ".chain"
-        self.out_chainmergesort_file = output_files + ".chainMergeSort"
-        self.all_chain_file = str(target)[:-5] + "_" + \
-            str(query)[:-5] + ".allchain"
-        self.pre_net_file = str(target)[:-5] + "_" + str(query)[:-5] + ".prenet"
-        self.target_net_file = str(target)[:-5] + ".net"
-        self.query_net_file = str(query)[:-5] + ".net"
-        self.syntenic_file = str(target)[:-5] + "_" + str(query)[:-5] + \
-            ".syntenicnet"
-        self.unsorted_axt_file = str(target)[:-5] + "_" + str(query)[:-5] + \
-            "_unsorted.axt"
-        self.axt_file = str(target)[:-5] + "_" + str(query)[:-5] + ".axt"
-        self.maf_file = str(target)[:-5] + "_" + str(query)[:-5] + ".maf"
+        self.output_file = self.temp_file + "_temp.lav"
+        self.out_psl_file = self.temp_file + "_temp.psl"
+        self.out_chain_file = self.temp_file + "_temp.chain"
+        self.out_chainmergesort_file = self.temp_file + "_temp.chainMergeSort"
+        self.all_chain_file = self.temp_file + ".allchain"
+        self.pre_net_file = self.temp_file + ".prenet"
+        self.target_net_file = self.temp_file + ".net"
+        self.query_net_file = self.temp_file + ".net"
+        self.syntenic_file = self.temp_file_dir + ".syntenicnet"
+        self.unsorted_axt_file = self.temp_file_dir + "_unsorted.axt"
+        self.axt_file = "aligned/" + self.query_only + "/axt/" + \
+            self.target_only + "_" + self.query_only + ".axt"
+        self.maf_file = "aligned/" + self.query_only + "/maf/" + \
+            self.target_only + "_" + self.query_only + ".maf"
 
         # Call functions to proceed with alignment steps
+        self.create_temp_sample_dir()
+        self.check_2bit()
         self.sizes_files()
         self.lastz()
         self.validate_completion()
@@ -63,10 +73,17 @@ class LastZ:
         self.axt_to_maf()
         self.clean_up()
 
+    def create_temp_sample_dir(self):
+        if not path.exists(self.temp_file_dir):
+            makedirs(self.temp_file_dir)
+
     def check_2bit(self):
         """
         Check the input sequence is in .2bit format.
         """
+        print self.temp_file_dir
+        print self.temp_file
+        print self.output_file
         if self.target[-4:] != "2bit" or self.query[-4:] != "2bit":
             print "Error: input files must be in .2bit format."
             exit()
@@ -76,6 +93,7 @@ class LastZ:
         Appends the alignment status to an associated log file.
         """
         # Remove milliseconds from the logged time
+        print "log:", self.log_file
         time = str(time).split(".")[0]
         with open(self.log_file, "a+") as log_file:
             log_file.write("[{2}] {0}/12: {1}\n".format(
@@ -105,27 +123,27 @@ class LastZ:
         Parameter explanations:
             --nochain:
                 - Skip the chaining phase, not performed by default.
-            O=600:
+            O=400:
                 - Gap open penalty
-            E=150:
+            E=30:
                 - Gap extend penalty
-            H=0 (--inner):
+            H=3000 (--inner):
                 - Perform additional alignment between gapped alignment blocks,
                   not performed by default.
-            K=4500:
+            K=5000:
                 - Score threshold for the x-drop extension method.
                 - HSPs scoring lower than this are discarded.
                 - By default, the entropy adjustment is used.
-            L=3000:
+            L=5000:
                 - Threshold for gapped extension, alignments scoring lower than
                   this are dicarded.
                 - Gapped extension performed by default, and alignment ends are
                   trimmed to the locations giving the maximum score.
-            M=254:
+            M=10:
                 - Dynamically mask the target sequence by excluding any
                   positions that appear in too many alignments from further
                   consideration for seeds.
-            T=2:
+            T=1:
                 - Seed requires a 19-bp word with matches in 12 specific
                   positions (1110100110010101111).
             Y=15000:
@@ -140,11 +158,18 @@ class LastZ:
         out_format = "--format=" + str(self.output_format)
         out_file = "--output=" + str(self.output_file)
         score_mat = "Q=" + str(self.score_matrix)
+        
+         
 
-        call(["/nfs/research1/goldman/conor/tools/lastz/src/lastz", self.target,
-              self.query, "--nochain", "E=150", "H=0", "K=4500", "L=3000",
-              "M=254", "O=600", "T=2", "Y=15000", score_mat, "--markend",
-              out_format, out_file])
+        query_range = self.query + "[1..25000000]"
+        target_range = self.target + "[1..25000000]"
+
+        call(["/nfs/research1/goldman/conor/tools/lastz/src/lastz", target_range,
+              query_range, "--nochain", "E=30", "H=3000", "K=5000", "L=5000",
+              "M=10", "O=400", "T=1", "Y=15000", score_mat, "--markend",
+              "--allocate:traceback=500.0M", out_format, out_file])
+
+        print "After call"
 
     def validate_completion(self):
         self.update_log("Validating alignment", "2", datetime.datetime.now())
@@ -156,6 +181,7 @@ class LastZ:
                                       self.output_file]).rstrip())
         # If last line is not the completion string, exit
         if last_line != "# lastz end-of-file":
+            self.update_log("FAILED", "1", datetime.datetime.now())
             print("Error: {0} and {1} failed to align.".format(self.target,
                                                                self.query))
             exit()
@@ -292,27 +318,34 @@ class LastZ:
 
 
 def main():
-    print argv[1].split("/")[-1]
+    # Create directory to store logs of runs if it doesn't exist
+    if not path.exists("lastz_logs"):
+        makedirs("lastz_logs")
+
+    # Define path for present sample, check if it exists, if not, create it
+    sample_path = "lastz_logs" + "/" + str(argv[2]).split("/")[-1].split(".")[0]
+    if not path.exists(sample_path):
+        makedirs(sample_path)
+
+    print "pr:",argv[1].split("/")[-1]
+
     # Name for log file of run
     log_file = str(argv[1]).split("/")[-1][:-5] + "_" + \
         str(argv[2]).split("/")[-1][:-5] + ".log"
 
     # Path to check for exitence of identical log file
-    log_file_path = "lastz_logs/" + log_file
+    log_file_path = sample_path + "/" + log_file
 
     # Remove log file if it already existed
     if path.exists(log_file_path):
         remove(str(log_file_path))
 
-    # Create directory to store logs of runs if it doesn't exist
-    if not path.exists("lastz_logs"):
-        makedirs("lastz_logs")
-
-    # Perform with alignment, chaining and netting
+    # Perform alignment, chaining and netting
     LastZ(target=argv[1],
           query=argv[2],
           score_matrix="/nfs/research1/goldman/conor/scripts/lastz/human_matrix.txt",
-          output_files="out")
+          output_files="out",
+          log_path=sample_path)
 
 
 if __name__ == "__main__":
