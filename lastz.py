@@ -9,11 +9,11 @@ from subprocess import PIPE
 from subprocess import Popen
 from sys import exit
 from sys import argv
+from sys import version_info
 from os import remove
 from os import devnull
 from os import path
 from os import makedirs
-
 
 class LastZ:
     def __init__(self, output_dir=".", score_matrix=None, query="",
@@ -23,9 +23,12 @@ class LastZ:
         Python wrapper for performing a human-human lastz alignment.
         """
         # Declare variables
+        self.sample_file_dir = \
+            ("/hps/nobackup/goldman/conor/1k_genomes/template_switching_sm/aligned/") + \
+            query.split("/")[-1].split(".")[0] + "/maf/"
         self.temp_file_dir = \
-            ("/hps/nobackup/research/goldmans/conor/lastz_temp_files/") + \
-            query.split("/")[-1].split(".")[0] + "/"
+            ("/hps/nobackup/goldman/conor/1k_genomes/template_switching_sm/aligned/") + \
+            query.split("/")[-1].split(".")[0] + "/temp_files/"
         self.temp_file = self.temp_file_dir + \
             query.split("/")[-1].split(".")[0] + "." + \
             query.split("/")[-1].split(".")[1]
@@ -47,17 +50,17 @@ class LastZ:
         self.out_chainmergesort_file = self.temp_file + "_temp.chainMergeSort"
         self.all_chain_file = self.temp_file + ".allchain"
         self.pre_net_file = self.temp_file + ".prenet"
-        self.target_net_file = self.temp_file + ".net"
-        self.query_net_file = self.temp_file + ".net"
-        self.syntenic_file = self.temp_file_dir + ".syntenicnet"
-        self.unsorted_axt_file = self.temp_file_dir + "_unsorted.axt"
-        self.axt_file = "aligned/" + self.query_only + "/axt/" + \
-            self.target_only + "_" + self.query_only + ".axt"
+        self.target_net_file = self.temp_file + "_target.net"
+        self.query_net_file = self.temp_file + "_query.net"
+        self.syntenic_file = self.temp_file + "_temp.syntenicnet"
+        self.unsorted_axt_file = self.temp_file + "_unsorted.axt"
+        self.axt_file = self.temp_file + ".axt"
         self.maf_file = "aligned/" + self.query_only + "/maf/" + \
             self.target_only + "_" + self.query_only + ".maf"
 
-        # Call functions to proceed with alignment steps
+        # Call functions to proceed with alignment step_sms
         self.create_temp_sample_dir()
+        self.create_sample_dir()
         self.check_2bit()
         self.sizes_files()
         self.lastz()
@@ -71,21 +74,31 @@ class LastZ:
         self.net_to_axt()
         self.axt_sort()
         self.axt_to_maf()
-        self.clean_up()
+        #self.clean_up()
 
     def create_temp_sample_dir(self):
         if not path.exists(self.temp_file_dir):
-            makedirs(self.temp_file_dir)
+            try:
+                makedirs(self.temp_file_dir)
+            except:
+                pass
+    
+    def create_sample_dir(self):
+        if not path.exists(self.sample_file_dir):
+            try:
+                makedirs(self.sample_file_dir)
+            except:
+                pass
 
     def check_2bit(self):
         """
         Check the input sequence is in .2bit format.
         """
-        print self.temp_file_dir
-        print self.temp_file
-        print self.output_file
+        print(self.temp_file_dir)
+        print(self.temp_file)
+        print(self.output_file)
         if self.target[-4:] != "2bit" or self.query[-4:] != "2bit":
-            print "Error: input files must be in .2bit format."
+            print("Error: input files must be in .2bit format.")
             exit()
 
     def update_log(self, step_name, step_no, time):
@@ -93,12 +106,12 @@ class LastZ:
         Appends the alignment status to an associated log file.
         """
         # Remove milliseconds from the logged time
-        print "log:", self.log_file
+        print("log:", self.log_file)
         time = str(time).split(".")[0]
         with open(self.log_file, "a+") as log_file:
-            log_file.write("[{2}] {0}/12: {1}\n".format(
+            log_file.write("[{2}] {0}/11: {1}\n".format(
                 step_no, step_name, time))
-        print("[{2}] {0}/12: {1}".format(step_no, step_name, time))
+        print("[{2}] {0}/11: {1}".format(step_no, step_name, time))
 
     def sizes_files(self):
         """
@@ -108,12 +121,16 @@ class LastZ:
         target_sizes = self.target[:-5] + ".sizes"
         query_sizes = self.query[:-5] + ".sizes"
         if not path.exists(target_sizes):
-            p1 = Popen(["/homes/cwalker/tools/lastz/data/bin/twoBitInfo",
+            p1 = Popen(["/hps/nobackup/goldman/conor/1k_genomes/template_switching_sm/tools/twoBitInfo",
                        self.target, "stdout"], stdout=PIPE)
             call(["sort", "-k2rn"], stdin=p1.stdout,
                  stdout=open(target_sizes, "w"))
+        # Remove query sizes file if exists, clears up bad first run, oops
+        if path.exists(query_sizes):
+            remove(query_sizes)
+        # Create query.sizes file
         if not path.exists(query_sizes):
-            p1 = Popen(["/homes/cwalker/tools/lastz/data/bin/twoBitInfo",
+            p1 = Popen(["/hps/nobackup/goldman/conor/1k_genomes/template_switching_sm/tools/twoBitInfo",
                        self.query, "stdout"], stdout=PIPE)
             call(["sort", "-k2rn"], stdin=p1.stdout,
                  stdout=open(query_sizes, "w"))
@@ -157,19 +174,13 @@ class LastZ:
         # Format options to pass to lastz
         out_format = "--format=" + str(self.output_format)
         out_file = "--output=" + str(self.output_file)
-        score_mat = "Q=" + str(self.score_matrix)
+        score_mat = "Q=" + str(self.score_matrix) 
         
-         
 
-        query_range = self.query + "[1..25000000]"
-        target_range = self.target + "[1..25000000]"
-
-        call(["/nfs/research1/goldman/conor/tools/lastz/src/lastz", target_range,
-              query_range, "--nochain", "E=30", "H=3000", "K=5000", "L=5000",
-              "M=10", "O=400", "T=1", "Y=15000", score_mat, "--markend",
-              "--allocate:traceback=500.0M", out_format, out_file])
-
-        print "After call"
+        call(["/hps/nobackup/goldman/conor/1k_genomes/template_switching_sm/tools/lastz", self.target,
+              self.query, "--nochain", "E=30", "H=3000", "K=5000", "L=5000",
+              "M=10", "O=400", "T=1", score_mat, "--markend",
+               out_format, out_file])
 
     def validate_completion(self):
         self.update_log("Validating alignment", "2", datetime.datetime.now())
@@ -180,8 +191,13 @@ class LastZ:
         last_line = str(check_output(["tail", "-n", "1",
                                       self.output_file]).rstrip())
         # If last line is not the completion string, exit
+        print("last line:", last_line)
+        # decode byte info if python3
+        if version_info >= (3, 0):
+            last_line = last_line[2:-1]
         if last_line != "# lastz end-of-file":
             self.update_log("FAILED", "1", datetime.datetime.now())
+            self.update_log(last_line, "`", datetime.datetime.now())
             print("Error: {0} and {1} failed to align.".format(self.target,
                                                                self.query))
             exit()
@@ -194,10 +210,10 @@ class LastZ:
                         datetime.datetime.now())
         # Name for psl file
         # Call kentUtils tool lavToPsl to perform the format conversion
-        call(["/homes/cwalker/tools/lastz/data/bin/lavToPsl", self.output_file,
+        call(["/hps/nobackup/goldman/conor/1k_genomes/template_switching_sm/tools/lavToPsl", self.output_file,
               self.out_psl_file], stdout=self.FNULL, stderr=STDOUT)
         # Delete the lav file
-        remove(self.output_file)
+        #remove(self.output_file)
 
     def chaining(self):
         """
@@ -214,12 +230,12 @@ class LastZ:
         # Set minScore to 5000
         min_score = "-minScore=5000"
         # Call axtChain
-        call(["/homes/cwalker/tools/lastz/data/bin/axtChain", "-psl",
+        call(["/hps/nobackup/goldman/conor/1k_genomes/template_switching_sm/tools/axtChain", "-psl",
               min_score, score_scheme, linear_gap,
               self.out_psl_file, self.target, self.query,
               self.out_chain_file], stdout=self.FNULL, stderr=STDOUT)
         # Delete psl file
-        remove(self.out_psl_file)
+        #remove(self.out_psl_file)
 
     def chain_merge_sort(self):
         """
@@ -229,10 +245,10 @@ class LastZ:
         # Call to chainMergeSort from kentUtils
         self.update_log("Chaining, merging & sorting", "5",
                         datetime.datetime.now())
-        call(["/homes/cwalker/tools/lastz/data/bin/chainMergeSort",
+        call(["/hps/nobackup/goldman/conor/1k_genomes/template_switching_sm/tools/chainMergeSort",
               self.out_chain_file], stdout=open(self.all_chain_file, "w"))
         # Remove file from previous step  containing shorter sorted chains
-        remove(self.out_chain_file)
+        #remove(self.out_chain_file)
 
     def chain_pre_net(self):
         """
@@ -240,11 +256,11 @@ class LastZ:
         """
         self.update_log("Pre-netting processing", "6", datetime.datetime.now())
         # Call chainPreNet from kentUtils
-        call(["/homes/cwalker/tools/lastz/data/bin/chainPreNet",
+        call(["/hps/nobackup/goldman/conor/1k_genomes/template_switching_sm/tools/chainPreNet",
               self.all_chain_file, self.target_sizes, self.query_sizes,
               self.pre_net_file], stdout=self.FNULL, stderr=STDOUT)
         # Remove all_chain file from previous step
-        remove(self.all_chain_file)
+        #remove(self.all_chain_file)
 
     def chain_net(self):
         """
@@ -253,7 +269,7 @@ class LastZ:
         # Call to chainNet from kentUtils
         self.update_log("Generating alignment nets", "7",
                         datetime.datetime.now())
-        call(["/homes/cwalker/tools/lastz/data/bin/chainNet",
+        call(["/hps/nobackup/goldman/conor/1k_genomes/template_switching_sm/tools/chainNet",
               self.pre_net_file, self.target_sizes, self.query_sizes,
               self.target_net_file, self.query_net_file],
              stdout=self.FNULL, stderr=STDOUT)
@@ -265,7 +281,7 @@ class LastZ:
         self.update_log("Adding synteny information", "8",
                         datetime.datetime.now())
         # Call to netSyntenic from kentUtils
-        call(["/homes/cwalker/tools/lastz/data/bin/netSyntenic",
+        call(["/hps/nobackup/goldman/conor/1k_genomes/template_switching_sm/tools/netSyntenic",
               self.target_net_file, self.syntenic_file],
              stdout=self.FNULL, stderr=STDOUT)
 
@@ -276,7 +292,7 @@ class LastZ:
         self.update_log("Converting to .axt format", "9",
                         datetime.datetime.now())
         # Call to netToAxt from kentUtils
-        call(["/homes/cwalker/tools/lastz/data/bin/netToAxt",
+        call(["/hps/nobackup/goldman/conor/1k_genomes/template_switching_sm/tools/netToAxt",
               self.syntenic_file, self.pre_net_file, self.target,
               self.query, self.unsorted_axt_file], stdout=self.FNULL,
              stderr=STDOUT)
@@ -288,7 +304,7 @@ class LastZ:
         self.update_log("Sorting the .axt file(s)", "10",
                         datetime.datetime.now())
         # Call to axtSort from kentUtils
-        call(["/homes/cwalker/tools/lastz/data/bin/axtSort",
+        call(["/hps/nobackup/goldman/conor/1k_genomes/template_switching_sm/tools/axtSort",
               self.unsorted_axt_file, self.axt_file],
              stdout=self.FNULL, stderr=STDOUT)
 
@@ -298,7 +314,7 @@ class LastZ:
         """
         self.update_log("Converting .axt to .maf", "11", datetime.datetime.now())
         # Call to axtToMaf from kentUtils
-        call(["/homes/cwalker/tools/lastz/data/bin/axtToMaf", self.axt_file,
+        call(["/hps/nobackup/goldman/conor/1k_genomes/template_switching_sm/tools/axtToMaf", self.axt_file,
               self.target_sizes, self.query_sizes, self.maf_file])
 
     def clean_up(self):
@@ -320,14 +336,19 @@ class LastZ:
 def main():
     # Create directory to store logs of runs if it doesn't exist
     if not path.exists("lastz_logs"):
-        makedirs("lastz_logs")
+        try:
+            makedirs("lastz_logs")
+        except:
+            pass
 
     # Define path for present sample, check if it exists, if not, create it
     sample_path = "lastz_logs" + "/" + str(argv[2]).split("/")[-1].split(".")[0]
     if not path.exists(sample_path):
-        makedirs(sample_path)
+        try:
+            makedirs(sample_path)
+        except:
+            pass
 
-    print "pr:",argv[1].split("/")[-1]
 
     # Name for log file of run
     log_file = str(argv[1]).split("/")[-1][:-5] + "_" + \
@@ -343,7 +364,7 @@ def main():
     # Perform alignment, chaining and netting
     LastZ(target=argv[1],
           query=argv[2],
-          score_matrix="/nfs/research1/goldman/conor/scripts/lastz/human_matrix.txt",
+          score_matrix="/hps/nobackup/goldman/conor/1k_genomes/template_switching_sm/tools/lastz_params/human_matrix.txt",
           output_files="out",
           log_path=sample_path)
 
